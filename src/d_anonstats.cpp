@@ -262,9 +262,15 @@ static int GetRenderInfo()
 
 static int GetGLVersion()
 {
-	if (screen->Backend() == 1) return vkversion;
-	auto info = gl_getInfo();
-	return int(info.first * 10);
+    if (screen->Backend() == 1) return vkversion; // Vulkan path
+
+    auto info = gl_getInfo();
+
+    #ifdef __APPLE__
+        return 33; // Force OpenGL 3.3 on macOS
+    #else
+        return int(info.first * 10);
+    #endif
 }
 
 static void D_DoHTTPRequest(const char *request)
