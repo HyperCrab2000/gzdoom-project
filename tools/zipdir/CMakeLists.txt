@@ -1,6 +1,6 @@
 cmake_minimum_required( VERSION 3.16 )
 
-if( NOT CMAKE_CROSSCOMPILING )
+if( NOT CMAKE_CROSSCOMPILING OR EMSCRIPTEN )
 	include_directories( SYSTEM "${BZIP2_INCLUDE_DIR}" "${LZMA_INCLUDE_DIR}" )
 	add_executable( zipdir
 		zipdir.c )

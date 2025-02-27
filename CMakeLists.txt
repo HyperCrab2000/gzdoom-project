@@ -1,5 +1,7 @@
 cmake_minimum_required( VERSION 3.16 )
 
+option(ZDOOM_BUILD_TOOLS "Build necessary tools (zipdir, etc.)" ON)
+
 if( COMMAND cmake_policy )
 	if( POLICY CMP0011 )
 		cmake_policy( SET CMP0011 NEW )
@@ -58,8 +60,17 @@ if( FORCE_CROSSCOMPILE )
 endif()
 
 if(CMAKE_CROSSCOMPILING)
-	set(IMPORT_EXECUTABLES "IMPORTFILE-NOTFOUND" CACHE FILEPATH "Export file from native build.")
-	include(${IMPORT_EXECUTABLES})
+    # Ensure IMPORT_EXECUTABLES is valid to prevent errors
+    if(NOT IMPORT_EXECUTABLES OR IMPORT_EXECUTABLES STREQUAL "IMPORTFILE-NOTFOUND")
+        message(WARNING "IMPORT_EXECUTABLES not found, using empty include as a workaround")
+        set(IMPORT_EXECUTABLES "")
+    endif()
+    message(STATUS "IMPORTFILE variable: ${IMPORT_EXECUTABLES}")
+    if(EXISTS ${IMPORT_EXECUTABLES})
+        include(${IMPORT_EXECUTABLES})
+    else()
+        message(WARNING "IMPORT_EXECUTABLES does not exist, skipping include")
+    endif()
 endif()
 
 # Recursive function to place PK3 archive source files into a hierarchy of source file in the IDE
@@ -96,9 +107,10 @@ function( add_pk3 PK3_NAME PK3_DIR )
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ZDOOM_OUTPUT_DIR}/${PK3_NAME} $<TARGET_FILE_DIR:zdoom>/${PK3_NAME}
 			DEPENDS zipdir )
 	else()
-		add_custom_command( OUTPUT ${ZDOOM_OUTPUT_DIR}/${PK3_NAME}
-			COMMAND zipdir -udf ${PK3_ZIPDIR_OPTIONS} ${ZDOOM_OUTPUT_DIR}/${PK3_NAME} ${PK3_DIR}
-			DEPENDS zipdir )
+        add_custom_command( OUTPUT ${ZDOOM_OUTPUT_DIR}/${PK3_NAME}
+            COMMAND ${CMAKE_COMMAND} -E touch $<TARGET_FILE:zipdir>
+            COMMAND zipdir -udf ${PK3_ZIPDIR_OPTIONS} ${ZDOOM_OUTPUT_DIR}/${PK3_NAME} ${PK3_DIR}
+            DEPENDS zipdir )
 	endif()
 	# Create a list of source files for this PK3, for use in the IDE
 	# Phase 1: Create a list of all source files for this PK3 archive, except
@@ -108,7 +120,7 @@ function( add_pk3 PK3_NAME PK3_DIR )
 	# file names here, because they confuse CMake.
 	# This only affects the list of source files shown in the IDE.
 	# It does not actually remove the files from the PK3 archive.
-	# First replace that toxic bracket character with something we can handle
+	# First replace that toxic bracket character with something we can handleF
 	string(REPLACE "[" confusing_bracket PK3_SRCS "${PK3_SRCS}")
 	string(REPLACE "]" confusing_bracket PK3_SRCS "${PK3_SRCS}")
 	foreach(PK3_SRC ${PK3_SRCS}) # All source files at all levels
@@ -121,10 +133,13 @@ function( add_pk3 PK3_NAME PK3_DIR )
 	# Phase 2: Create the PK3 build rule, including the source file list for the IDE
 	# Touch the zipdir executable here so that the pk3s are forced to
 	# rebuild each time since their dependency has "changed."
-	add_custom_target( ${PK3_TARGET} ALL
-		COMMAND ${CMAKE_COMMAND} -E touch $<TARGET_FILE:zipdir>
-		DEPENDS ${ZDOOM_OUTPUT_DIR}/${PK3_NAME}
-		SOURCES ${PK3_SRCS})
+    if(TARGET zipdir)
+        add_dependencies(${PK3_TARGET} zipdir)
+    else()
+        message(WARNING "⚠️ WARNING: zipdir target not found! PK3 dependencies may fail.")
+    endif()
+
+
 	# Phase 3: Assign source files to a nice folder structure in the IDE
 	assort_pk3_source_folder("Source Files" ${PK3_DIR})
 	# Phase 4: Add the resulting PK3 to the install target.
@@ -407,7 +422,8 @@ option( DYN_OPENAL "Dynamically load OpenAL" ON )
 
 add_subdirectory( libraries/lzma )
 add_subdirectory( libraries/miniz )
-add_subdirectory( tools )
+add_subdirectory( tools/zipdir )  # Ensure zipdir is built first
+add_subdirectory( tools )  # Rest of the tools
 add_subdirectory( wadsrc )
 add_subdirectory( wadsrc_bm )
 add_subdirectory( wadsrc_lights )
